@@ -3,152 +3,158 @@ import os
 import time
 import threading
 import random
+import sys
+from threading import *
 
-print("Welcome!")
-time.sleep(1)
-print("[*]FTP Messaging App")
+#PATHS
+SERVE_FILE="sdetails.txt"
+SREQ="./requests"
+SRES="./responses"
+PARENT="./../"
+RESPONSE="/responses"
+S_D={}
+STATE={}
+NAME=""
+MAXTIMEOUT=5
+MIP="127.1.1.1"
+MPORT=2121
+F=["add","sub","mul","div","plusplus"]
+#FUNCTIONS
+def makefolder(NAME):
+    os.mkdir(NAME)
+    os.chdir("./"+NAME)
 
-#Message format
-# Name of sender
-# message
+def welcome():
+    print("Welcome!")
+    time.sleep(1)
+    print("[*]FTP Messaging App")
 
-#Global Variables
-mcount=1
-master_file="master_file"
-mycount=0
+def randN(N):
+	min = pow(10, N-1)
+	max = pow(10, N) - 1
+	return random.randint(min, max)
 
-while(1):
-
-    #make these also dynamic
-    print("[*]Enter URL or IP")
-    ftpHost = "127.1.1.1"
-    print("[*]Enter Port No.")
-    ftpPort = 2121
-    print("Enter your Name")
-    Name=input()
-    # ftpUname = "username"
-    # ftpPass = "password"
-
-
-
-        
-
-    #connection establishment
-    try:
-        ftp = ftplib.FTP(timeout=30)
-        ftp.connect(ftpHost, ftpPort)
-        ftp.login()
-        print("[+]Successfully Connected to server")
-    except Exception as e:
-        print(e)
-        print("[-]Some error occured while establishing connection")
-        quit()
-
-    def download_file(ftp,tfn):
-        a=""
-        l=[]
-        for i in range(len(tfn)):
-            if tfn[i]=="/":
-                l.append(a)
-                a=""
-            else:
-                a+=tfn[i]
-        path=""
-        if(len(a)==len(tfn)):
-            path="/"
-        else: path=tfn[:(len(tfn)-len(a))-1]
-        # print(path)
-        # print(a)
-        ftp.cwd(path)
-        with open(a, "wb") as file:
-            retCode = ftp.retrbinary("RETR " + a, file.write)
-        ftp.cwd("/")
-        # print("done")
-        return a
-
-    def send_message(ftp):
-        print("Press 1 to send message")
-        if(input()!="1"): return
-        print("Enter Receiver Name")
-        r=input()
-        print("Enter Message")
-        m=input()
-        fnames=ftp.nlst()
-        if r in fnames:
-            download_file(ftp,r)
-            # print("download done")
-            f=open(r, "w")
-            sa=Name+": "+m   
-            f.write(sa)
-            f.close()
-            # print("write done")
-            with open(r, "rb") as f:
-                ftp.storbinary(f"STOR {r}", f, blocksize=1024*1024)
-            # print("ok")
-            os.remove(r)
+def process_server_details():
+    with open(SERVE_FILE,"r") as f:
+        det=f.readlines();
+        for d in det:
+            print(d)
+            d=d.split()
+            print(d)
+            S_D[d[0]]=d 
+        print(S_D)
+def download_file(ftp,tfn):
+    with open(tfn, "wb") as file:
+        retCode = ftp.retrbinary("RETR " + tfn, file.write)
+        return tfn
+def lookup(mftp):
+    if os.path.exists(SERVE_FILE):
+        os.remove(SERVE_FILE)
+    download_file(mftp,SERVE_FILE);
+    process_server_details()
+def extract_details(filename):
+    flist=[]
+    temp=""
+    for i in filename:
+        if(i=="$"):
+            flist.append(temp)
+            temp=""
         else:
-            # print("here")
-            f=open(r, "w")
-            sa=Name+": "+m   
-            f.write(sa)
-            f.close()
-            # print("write done")
-            try:
-                with open(r, "rb") as f:
-                    ftp.storbinary(f"STOR {r}", f, blocksize=1024*1024)
-            except Exception as e:
-                print(e)
-            os.remove(r)
-            # print("ok")
-            
+            temp=temp+i
+    flist.append(temp)
+    return flist
 
-    def get_messgae():
-        # print("Fetching Messages")
+
+def send_message(nums,func,server):
+    uid=randN(8)
+    global NAME
+    print(NAME,func,uid)
+    func=func-1
+    req_file_name=NAME+"$"+F[func]+"$"+str(uid)
+    with open(req_file_name,"w") as file:
+        file.write(str(nums)+"\n");
+        if S_D.get(server) is not None:
+            if STATE.get(server) is not None:
+                file.write(STATE[server])
+        else:
+            print("Invalid Server Name")
+            return
+    ftp = ftplib.FTP(timeout=30)
+    ftp.connect(S_D[server][2], int(S_D[server][3]))
+    ftp.login()
+    with open(req_file_name, "rb") as f:
+        ftp.cwd(SREQ)
+        ftp.storbinary(f"STOR {req_file_name}", f, blocksize=1024*1024)
+        ftp.cwd(PARENT)
+    os.remove(req_file_name)
+    print("[+]Trying to fetch response")
+    ftp.cwd(RESPONSE)
+    time.sleep(5)
+    timer=0
+    received=False
+    while(True):
+        
         fnames=ftp.nlst()
-        if Name in fnames:
-            download_file(ftp,Name)
-            file= open(Name, "r")
-            # print("okok")
-            con=file.read()
-            f=open(Name, "w")
-            f.close()
-            if(len(con)>0):
-                print('New messages:- ',con)
-                with open(Name, "rb") as f:
-                    ftp.storbinary(f"STOR {Name}", f, blocksize=1024*1024)
-                
-            else:
-                pass
-            os.remove(Name)
-        # print("done get message")
+        print(fnames)
+        for i in fnames:
+            print(i)
+            flist=extract_details(i)
+            sender=flist[0]
+            id=flist[2]
+            print(NAME)
+            print(uid)
+            if(sender==NAME and id==str(uid)):
+                download_file(ftp,i)
+                status=ftp.delete(i)
+                file= open(i, "r")
+                con=file.readlines()
+                if(len(con)>1):
+                    if(con[0]=="FE"):
+                        print("Invalid function")
+                    elif(con[0]=="SE"):
+                        print("Session ID invalid")
+                        del STATE[server]
+                    else:
+                        print(con[0])
+                        STATE[server]=int(con[1])
 
-    def funct_1():
-        while(1):
-            get_messgae()
-            time.sleep(1)
-    thread1=threading.Thread(target=funct_1)
-    try:
-        thread1.start()
-        while(1):
-            # get_messgae(ftp)
-            send_message(ftp)
-            # get_messgae(ftp)
-    except Exception as e:
-        print(e)
-        print("[-]Some Error Occured")
+                file.close()
+                os.remove(i)
+                received=True
 
-    print("[*]Press 1 to exit")
-    if(input()=="1"): break
-
-
-
-    # #print cwd
-    # print(ftp.pwd())
-    # #listfiles in cwd
-    # print(fnames)
+        if(received): break
+        else: 
+            timer+=1
+            time.sleep(2)
+            if(timer>MAXTIMEOUT):
+                print("[+]Timelimit expired")
+                break
+    
 
 
-
-# send QUIT command to the FTP server and close the connection
-ftp.quit()
-print("Bye!")
+if __name__=="__main__":
+    welcome()
+    print("[*]Enter your Name")
+    NAME=input()
+    makefolder(NAME)
+    mftp = ftplib.FTP(timeout=30)
+    mftp.connect(MIP, MPORT)
+    mftp.login()
+    lookup(mftp)
+    while(1):
+        print("[+]Enter the operation you want to perform. Enter number")
+        print("[+]1. Lookup")
+        print("[+]2. Send Message")
+        n=int(input())
+        if(n==1):
+            lookup(mftp)
+        elif(n==2):
+            func=int(input("[+]Enter the operation code\n1. Add\n2. Sub\n3. Multiply\n4. Div\n5. PlusPlus\n"))
+            if(func<0 and func>6):
+                print("innvalid function")
+                continue
+            print("Enter space seperated nums. if operation is plusplus then enter none\n")
+            nums=input()
+            print("Enter servername you want to direct this operation to\n")
+            server=input()
+            send_message(nums,func,server)
